@@ -52,11 +52,27 @@ export default function GapDetectionScreen() {
     },
     onError: (error: any) => {
       console.error('[UploadError]', error);
-      setErrorText(
-        error.response?.data?.detail ||
-        error.message ||
-        'Connection failed. Please ensure the backend is running and your device is on the same local network.'
-      );
+      
+      let message = 'Connection failed. Please ensure the backend is running and your device is on the same local network.';
+      
+      if (error.response?.data?.detail) {
+        const detail = error.response.data.detail;
+        if (typeof detail === 'string') {
+          message = detail;
+        } else if (Array.isArray(detail)) {
+          // Format Pydantic validation list errors (e.g. type, loc, msg, input, ctx)
+          message = detail.map((err: any) => {
+            const field = err.loc ? err.loc.join('.') : 'unknown';
+            return `${field}: ${err.msg}`;
+          }).join('\n');
+        } else {
+          message = JSON.stringify(detail);
+        }
+      } else if (error.message) {
+        message = error.message;
+      }
+      
+      setErrorText(message);
     }
   });
 

@@ -1,11 +1,10 @@
 import axios from 'axios';
 
-// Get API base URL from environment config (defaulting to local host if not set)
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.2:8000';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000, // 30 seconds timeout
+  timeout: 90000, // 90 seconds timeout for CPU model inference
   headers: {
     'Accept': 'application/json',
   }
@@ -27,6 +26,8 @@ export interface UploadResponse {
 /**
  * Uploads plantation image and KML boundary files to FastAPI backend
  */
+import { Platform } from 'react-native';
+
 export async function uploadFieldData(
   imageUri: string,
   imageName: string,
@@ -36,25 +37,29 @@ export async function uploadFieldData(
 ): Promise<UploadResponse> {
   const formData = new FormData();
 
-  // On React Native, we need to append the file objects containing uri, name, and type
-  // Use type casting to any so TypeScript doesn't throw a type error on React Native file shapes
-  formData.append('image_file', {
-    uri: imageUri,
-    name: imageName || 'plantation_image.jpg',
-    type: imageType || 'image/jpeg',
-  } as any);
+  if (Platform.OS === 'web') {
+    // On Web (browser), we must convert the picked file URIs (blob:http...) to actual Blobs
+    const imageBlob = await fetch(imageUri).then((r) => r.blob());
+    formData.append('image_file', imageBlob, imageName || 'plantation_image.jpg');
 
-  formData.append('kml_file', {
-    uri: kmlUri,
-    name: kmlName || 'field_boundary.kml',
-    type: 'application/vnd.google-earth.kml+xml',
-  } as any);
+    const kmlBlob = await fetch(kmlUri).then((r) => r.blob());
+    formData.append('kml_file', kmlBlob, kmlName || 'field_boundary.kml');
+  } else {
+    // On Mobile (Android/iOS), append the React Native specific file reference shape
+    formData.append('image_file', {
+      uri: imageUri,
+      name: imageName || 'plantation_image.jpg',
+      type: imageType || 'image/jpeg',
+    } as any);
 
-  const response = await api.post<UploadResponse>('/api/gap-detection/analyze', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+    formData.append('kml_file', {
+      uri: kmlUri,
+      name: kmlName || 'field_boundary.kml',
+      type: 'application/vnd.google-earth.kml+xml',
+    } as any);
+  }
+
+  const response = await api.post<UploadResponse>('/api/gap-detection/analyze', formData);
 
   return response.data;
 }
